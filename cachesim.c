@@ -166,12 +166,10 @@ void cache_access (char rw, uint64_t address, struct cache_stats_t *stats)
     int L2_index = convert_index(L1_tag, L1_index, con->C1, con->C2, con->B, con->S);
 
     //int set_contained;
-    printf("%i", L1[L1_index].tag);
     //check if hit in L1
         if (L1[L1_index].tag == L1_tag)
         {
             hit = TRUE;
-            printf("hit");
         }
    
     block* L1_block = &(L1[L1_index]);
@@ -204,6 +202,9 @@ void cache_access (char rw, uint64_t address, struct cache_stats_t *stats)
             block* L2blk = findL2block(L2_tag, L2_index);
             if(L2blk != 0){
                 hit = TRUE;
+                if(L2blk->valid == FALSE){
+                    hit = FALSE;
+                }
             }
 
             if(hit)
@@ -214,18 +215,17 @@ void cache_access (char rw, uint64_t address, struct cache_stats_t *stats)
             L1_block->tag = L1_tag;
 
             if(L2blk->dirty == TRUE){
-                updateblk->dirty = FALSE;
+                L1_block->dirty = FALSE;
             }
-            updateblk->dirty = FALSE;
+            L1_block->dirty = FALSE;
 
             } 
-            else 
+            else // L2 missed too 
             {
             stats->l2_read_misses = stats->l2_read_misses + 1;
 
             //update block
-            block* updateblock = &(L1[L1_index]);
-            updateblock->tag = L1_tag;
+            L1_block->tag = L1_tag;
 
             block* emptyblock = find_empty_block(L2_index);
             block* LRU;
@@ -259,6 +259,8 @@ void cache_access (char rw, uint64_t address, struct cache_stats_t *stats)
             //found empty block
                 emptyblock->valid = TRUE;
                 emptyblock->tag = L2_tag;
+                L1_block->tag = L1_tag;
+                L1_block->valid = TRUE;
             }
             
             
@@ -336,10 +338,8 @@ void cache_access (char rw, uint64_t address, struct cache_stats_t *stats)
 }
 
 block* find_LRU (int L2_index){
-            block* emptyblock;
-            block* LRU;
+            block* LRU = 0;
             int LRUcount = 99999999;
-            int LRUset = 0;
             //checks for empty block
             for(int j = 0; j < num_of_sets; j++)
             {
@@ -349,16 +349,13 @@ block* find_LRU (int L2_index){
                 if(checkblock->LRU < LRUcount){
                     LRU = checkblock;
                     LRUcount = checkblock->LRU;
-                    LRUset = j;
                 }
             }
             return LRU;
 }
 
 block* find_empty_block(int L2_index){
-            block* emptyblock;
-            block* LRU;
-            int emptyblockset = 0;
+            block* emptyblock = 0;
             //checks for empty block
             for(int j = 0; j < num_of_sets; j++)
             {
@@ -368,7 +365,6 @@ block* find_empty_block(int L2_index){
                 if(checkblock->valid == FALSE)
                 {
                     emptyblock = checkblock;
-                    emptyblockset = j;
                 }
 
             }
@@ -415,9 +411,15 @@ void cache_cleanup (struct cache_stats_t *stats)
     stats->write_misses = stats->l1_write_misses + stats->l2_write_misses;
     stats->misses = stats->read_misses + stats->write_misses;
 
-    stats->l1_miss_rate = stats->reads;
-    stats->l2_miss_rate = stats->reads;
-    stats->miss_rate = stats->reads;
+    stats->l1_miss_rate = (double)(stats->l1_read_misses + stats->l1_write_misses)/ (double)stats->reads;
+    stats->l2_miss_rate = (double)(stats->l2_read_misses + stats->l2_write_misses) / (double)stats->reads;
+    stats->miss_rate = (double)stats->misses/((double)stats->reads + (double)stats->writes);
+
+    double EMATL2 = 10 + (stats->l2_miss_rate) * 100;
+    double EMATL1 = 2 + (stats->l1_miss_rate) * EMATL2;
+
+    stats->l2_avg_access_time = EMATL2;
+    stats->avg_access_time = EMATL1;
     //calculate miss rates and averages
 }
 
@@ -463,7 +465,6 @@ static uint64_t get_index(uint64_t address, uint64_t C, uint64_t B, uint64_t S)
     uint64_t index;
 
     
-    int num_of_byteoffset_bits = B;
     int num_of_index_bits = C - B - S;
     //int num_of_tag_bits = 64 - num_of_byteoffset_bits - num_of_index_bits;
 
