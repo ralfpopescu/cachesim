@@ -158,6 +158,7 @@ void cache_access (char rw, uint64_t address, struct cache_stats_t *stats)
     
     stats->accesses = stats->accesses + 1;
     int hit = FALSE;
+    //get tags and indices
     uint64_t L1_tag = get_tag(address, con->C1, con->B, 0);
     int L1_index = get_index(address, con->C1, con->B, 0);
 
@@ -210,9 +211,7 @@ void cache_access (char rw, uint64_t address, struct cache_stats_t *stats)
             //increase stats
             stats->reads = stats->reads + 1;
             //pull into L1
-
-            block* updateblk = &(L1[L1_index]);
-            updateblk->tag = L1_tag;
+            L1_block->tag = L1_tag;
 
             if(L2blk->dirty == TRUE){
                 updateblk->dirty = FALSE;
@@ -408,9 +407,17 @@ void cache_cleanup (struct cache_stats_t *stats)
         the memory, run valgrind. For more information, google how to use valgrind.
     */
 
-    /**************** TODO ******************/
+    /**************** TODO ****************/
     free(L1);
     free(L2);
+
+    stats->read_misses = stats->l1_read_misses + stats->l2_read_misses;
+    stats->write_misses = stats->l1_write_misses + stats->l2_write_misses;
+    stats->misses = stats->read_misses + stats->write_misses;
+
+    stats->l1_miss_rate = stats->reads;
+    stats->l2_miss_rate = stats->reads;
+    stats->miss_rate = stats->reads;
     //calculate miss rates and averages
 }
 
